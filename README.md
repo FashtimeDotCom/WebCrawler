@@ -7,3 +7,5 @@ redis目前只用到了错误url记录，也可以作为队列，未爬取，已
 mongodb储存结构化数据
 
 系统有重试机制，日志，邮件警报等
+
+编写和scrapy一样，只需要编写items.py，pipelines.py，修改setting.py，run.py，spiders下编写爬取过程
