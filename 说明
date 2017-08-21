@@ -1,0 +1,35 @@
+爬虫系统 (python3.5以上模块化,需要支持async/await语法)
+
+目录结构：
+WebCrawler
+    |----common(通用模块)
+        |----__init__.py
+        |----email_manager.py(邮件管理)
+        |----error_code.py(错误码管理)
+        |----html_manager.py(html页面的redis管理)
+        |----item_manager.py(模仿scrapy的Field等类)
+        |----log_manager.py(日志管理)
+        |----random_headers.py(headers管理)
+        |----redis_manager.py(redis管理)
+        |----request_common.py(request通用函数)
+        |----request_manager.py(request管理和response管理)
+        |----url_manager.py(url的redis管理)
+    |----spiders(爬虫实现)
+        |----__init__.py
+        |----xxx.py(爬虫例子)
+    |----items.py(模仿scrapy的items)
+    |----pipelines.py(模仿scrapy的Pipeline)
+    |----run.py(入口函数)
+    |----setting.py(配置文件)
+
+
+python版本3.5或者以上(不然不支持async/await语法)
+需要安装mongodb,redis
+需要的第三方库
+redis
+aiohttp
+lxml
+pymongo
+
+只需要在spiders下写爬虫,编写items和pipelines,有点类似scrapy,因为格式是照着scrapy的格式仿写的
+按照spiders下的例子仿写就可以了解大致用法
