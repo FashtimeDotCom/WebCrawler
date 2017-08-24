@@ -11,7 +11,7 @@ from pipelines import MongoPipeline
 from common.request_common import asyncRetry
 from common.url_manager import UrlManager
 from common.log_manager import asyncErrorLoging,errorLoging
-from common.error_code import parse_error,insert_error,no_error,main_error,request_error
+from common.error_code import parse_error,no_error,main_error,request_error
 
 
 class Cto_Spider(object):
@@ -19,8 +19,8 @@ class Cto_Spider(object):
     name = 'java_cto'
     # 起始url列表
     start_urls = []
-    for x in ["java",]:#"python"
-        for i in range(1, 2):  # 6725
+    for x in ["java","python"]:#"python"
+        for i in range(1, 5):  # 6725
             url = 'http://so.51cto.com/index.php?project=blog&keywords=' + str(x) + '&sort=time&p=' + str(i)
             start_urls.append(url)
     # 当前日期前一天
@@ -36,10 +36,10 @@ class Cto_Spider(object):
     @asyncErrorLoging(request_error,no_error,"Cto_Spider.getPage")
     # 重试机制，错误url存进redis
     @asyncRetry(4,rm.add_error_url)
-    async def getPage(self,url,callback=None):
+    async def getPage(self,url):
         async with RequestManager().session as session:
             async with session.get(url,headers=self.headers) as resp:
-                # print("1111",resp.status)
+                print("java_cto 1111",resp.status)
                 # 断言，报错会进入重试机制
                 assert resp.status == 200
                 r_body = await resp.text(errors="ignore")
@@ -48,14 +48,15 @@ class Cto_Spider(object):
                 rp.url = url
                 rp.body = r_body
                 # 将Response对象传给函数
-                callback(rp)
+                return rp
 
     # 记入日志,第三个参数记录类名和函数名便于在日志中定位错误
     @errorLoging(parse_error,no_error,"Cto_Spider.grabPage")
     # 页面解析
     def grabPage(self,response):
         # print(response.body)
-        if response.body:
+        response = response.result()
+        if response:
             # html = lxml.html.fromstring(response.body)
             # td = html.cssselect(".res-doc")
             td = response.cssselect(".res-doc")
@@ -92,12 +93,12 @@ class Cto_Spider(object):
     @asyncErrorLoging(request_error,no_error,"Cto_Spider.getPage1")
     # 进入详细页面
     @asyncRetry(4,rm.add_error_url)
-    async def getPage1(self,url,callback=None):
+    async def getPage1(self,url):
         self.headers["Referer"] = url.get("upper_url")
         async with RequestManager().session as session:
             async with session.get(url.get("url"),headers=self.headers) as resp:
-                print("222",resp.status)
-                print("222url",url.get("url"))
+                print("java_cto 222",resp.status)
+                print("java_cto 222url",url.get("url"))
                 assert resp.status == 200
                 # print("222upper_url", url.get("upper_url"))
                 r_body = await resp.text(errors="ignore")
@@ -105,13 +106,14 @@ class Cto_Spider(object):
                 rp.url = url.get("url")
                 rp.body = r_body
                 rp.meta = self.prr.meta
-                callback(rp)
+                return rp
 
     # 记入日志,第三个参数记录类名和函数名便于在日志中定位错误
     @errorLoging(parse_error,no_error,"Cto_Spider.grabPage1")
     # 详细页面解析,入库
     def grabPage1(self, response):
-        if response.body:
+        response = response.result()
+        if response:
             articleTitle = response.cssselect("title")
             if articleTitle:
                 articleTitle = articleTitle[0].text_content().strip()
@@ -155,7 +157,7 @@ class Cto_Spider(object):
             typex = response.meta["type"]
             articleUrl = response.url
 
-            print("ccvd",articleUrl)
+            # print("ccvd",articleUrl)
 
             item = Item()
             # 回答数
@@ -193,28 +195,34 @@ class Cto_Spider(object):
     # 主函数
     def main(self):
         start = time.time()
+
         # 创建时间循环
         loop = asyncio.get_event_loop()
 
-        # 创建任务
-        tasks = [self.getPage(url,self.grabPage) for url in self.start_urls]
-        # 将任务放进事件循环中
-        loop.run_until_complete(asyncio.gather(*tasks))
+        for url in self.start_urls:
+            coroutine = self.getPage(url)
+            # 添加任务
+            task = asyncio.ensure_future(coroutine)
+            # 回调
+            task.add_done_callback(self.grabPage)
+            # 事件循环
+            loop.run_until_complete(task)
 
-        print("dddddddddddddddd")
+        print("ddddddddddd")
 
-        # 将同一层级的请求加入一个任务中
-        tasks1 = [self.getPage1(url,self.grabPage1)for url in self.prr.url]
-        loop.run_until_complete(asyncio.gather(*tasks1))
+        for url in self.prr.url:
+            coroutine = self.getPage1(url)
+            # 添加任务
+            task = asyncio.ensure_future(coroutine)
+            # 回调
+            task.add_done_callback(self.grabPage1)
+            # 事件循环
+            loop.run_until_complete(task)
 
         print("%s Elapsed Time: %s" % (self.name, time.time() - start))
 
-        # 关闭时间循环
-        loop.close()
 
-
-
-# 单个爬虫测试(单个爬虫调试时用)
-if __name__ == '__main__':
-    cs = Cto_Spider()
-    cs.main()
+# # 单个爬虫测试(单个爬虫调试时用)
+# if __name__ == '__main__':
+#     cs = Cto_Spider()
+#     cs.main()
