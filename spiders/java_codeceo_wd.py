@@ -10,7 +10,7 @@ from pipelines import MongoPipeline
 from common.request_common import asyncRetry
 from common.url_manager import UrlManager
 from common.log_manager import asyncErrorLoging,errorLoging
-from common.error_code import parse_error,insert_error,no_error,main_error,request_error
+from common.error_code import parse_error,no_error,main_error,request_error
 import datetime
 
 
@@ -19,8 +19,8 @@ class Codeceo_Wd_Spider(object):
     name = 'java_codeceo_wd'
     allowed_domains = ["codeceo.com"]
     start_urls = []
-    for x in ["java"]:# "python"
-        for i in range(1,2):
+    for x in ["java","python"]:#
+        for i in range(1,4):
             url = 'http://ask.codeceo.com/tag/'+str(x)+'/page_'+str(i)
             start_urls.append(url)
     yesterday = time.strftime('%Y-%m-%d', time.localtime(time.time() - 60 * 60 * 24))
@@ -31,22 +31,23 @@ class Codeceo_Wd_Spider(object):
 
     @asyncErrorLoging(request_error, no_error, "Codeceo_Wd_Spider.getPage")
     @asyncRetry(4, rm.add_error_url)
-    async def getPage(self, url, callback=None):
+    async def getPage(self, url):
         async with RequestManager().session as session:
             async with session.get(url, headers=self.headers) as resp:
-                print("1111", resp.status)
+                print("java_codeceo_wd 1111", resp.status)
                 assert resp.status == 200
                 # errors="ignore",忽略非法字符
                 r_body = await resp.text(errors="ignore")
                 rp = Response()
                 rp.url = url
                 rp.body = r_body
-                callback(rp)
+                return rp
 
     @errorLoging(parse_error, no_error, "Codeceo_Wd_Spider.grabPage")
     def grabPage(self, response):
+        response = response.result()
         # print(response.body)
-        if response.body:
+        if response:
             items = response.cssselect(".item")
             for item in items:
                 articleTime = item.cssselect("div.item-info > div >span")
@@ -79,8 +80,8 @@ class Codeceo_Wd_Spider(object):
                     articleTime = ""
                 # ------------------------------
                 # 时间判断
-                # if self.yesterday != articleTime:
-                #     continue
+                if self.yesterday != articleTime:
+                    continue
                 # ==============================
                 articleAnswers = item.cssselect(".vbox-number")
                 if articleAnswers:
@@ -129,12 +130,12 @@ class Codeceo_Wd_Spider(object):
 
     @asyncErrorLoging(request_error, no_error, "Codeceo_Wd_Spider.getPage1")
     @asyncRetry(4, rm.add_error_url)
-    async def getPage1(self, url, callback=None):
+    async def getPage1(self, url):
         self.headers["Referer"] = url.get("upper_url")
         async with RequestManager().session as session:
             async with session.get(url.get("url"), headers=self.headers) as resp:
-                print("222", resp.status)
-                # print("222url", url.get("url"))
+                print("java_codeceo_wd 222", resp.status)
+                print("java_codeceo_wd 222url", url.get("url"))
                 assert resp.status == 200
                 # print("222upper_url", url.get("upper_url"))
                 # errors="ignore",忽略非法字符
@@ -143,11 +144,12 @@ class Codeceo_Wd_Spider(object):
                 rp.url = url.get("url")
                 rp.body = r_body
                 rp.meta = self.prr.meta
-                callback(rp)
+                return rp
 
     @errorLoging(parse_error, no_error, "Codeceo_Wd_Spider.grabPage1")
     def grabPage1(self, response):
-        if response.body:
+        response = response.result()
+        if response:
             articleSentence = response.cssselect("div.entry-text.ask-entry")
             if articleSentence:
                 articleSentence = response.toString(articleSentence[0]).decode("utf-8")
@@ -209,23 +211,36 @@ class Codeceo_Wd_Spider(object):
             # 入库
             MongoPipeline().process_item(item, self.name)
 
+    # 记入日志,第三个参数记录类名和函数名便于在日志中定位错误
     @errorLoging(main_error, no_error, "Codeceo_Wd_Spider.main")
+    # 主函数
     def main(self):
         start = time.time()
 
+        # 创建时间循环
         loop = asyncio.get_event_loop()
 
-        tasks = [self.getPage(url, self.grabPage) for url in self.start_urls]
-        loop.run_until_complete(asyncio.gather(*tasks))
+        for url in self.start_urls:
+            coroutine = self.getPage(url)
+            # 添加任务
+            task = asyncio.ensure_future(coroutine)
+            # 回调
+            task.add_done_callback(self.grabPage)
+            # 事件循环
+            loop.run_until_complete(task)
 
         print("ddddddddddd")
 
-        tasks1 = [self.getPage1(url, self.grabPage1) for url in self.prr.url]
-        loop.run_until_complete(asyncio.gather(*tasks1))
+        for url in self.prr.url:
+            coroutine = self.getPage1(url)
+            # 添加任务
+            task = asyncio.ensure_future(coroutine)
+            # 回调
+            task.add_done_callback(self.grabPage1)
+            # 事件循环
+            loop.run_until_complete(task)
 
         print("%s Elapsed Time: %s" % (self.name, time.time() - start))
-
-        loop.close()
 
 # if __name__ == '__main__':
 #     cws = Codeceo_Wd_Spider()
