@@ -25,8 +25,7 @@ class Cto_Spider(object):
             start_urls.append(url)
     # 当前日期前一天
     yesterday = time.strftime('%Y-%m-%d', time.localtime(time.time() - 60 * 60 * 24))
-    # Response对象
-    prr = Response()
+    cdls = []
     # 随机header(在这里申明说明这个类的所有请求都用这个头信息，如果要每次改变请求头信息将这个申明放在请求函数中)
     headers = random_headers.random_headers()
     # URL的redis对象
@@ -76,36 +75,37 @@ class Cto_Spider(object):
                     # ===================================
                     # print("aaa222",articleTime)
                     # print("aaaa222",articleUrl)
-                    self.prr.url.append(
-                        {
-                            "url":articleUrl,
-                            "upper_url":response.url,
-                        }
-                    )
-                    self.prr.meta = {
-                        "articleTime": articleTime,
-                        # "articleTitle":articleTitle,
+                    meta = {
+                        "articleTime":articleTime,
                         "type": response.url.split("keywords=")[1].split("&")[0],
                     }
+                    url = {
+                        "url":articleUrl,
+                        "upper_url":response.url,
+                    }
+                    sda = {}
+                    sda["url"] = url
+                    sda["meta"]=meta
+                    self.cdls.append(sda)
 
 
     # 记入日志,第三个参数记录类名和函数名便于在日志中定位错误
     @asyncErrorLoging(request_error,no_error,"Cto_Spider.getPage1")
     # 进入详细页面
     @asyncRetry(4,rm.add_error_url)
-    async def getPage1(self,url):
-        self.headers["Referer"] = url.get("upper_url")
+    async def getPage1(self,response):
+        self.headers["Referer"] = response["url"].get("upper_url")
         async with RequestManager().session as session:
-            async with session.get(url.get("url"),headers=self.headers) as resp:
+            async with session.get(response["url"].get("url"),headers=self.headers) as resp:
                 print("java_cto 222",resp.status)
-                print("java_cto 222url",url.get("url"))
+                # print("java_cto 222url",response["url"].get("url"))
                 assert resp.status == 200
                 # print("222upper_url", url.get("upper_url"))
                 r_body = await resp.text(errors="ignore")
                 rp = Response()
-                rp.url = url.get("url")
+                rp.url = response["url"].get("url")
                 rp.body = r_body
-                rp.meta = self.prr.meta
+                rp.meta = response["meta"]
                 return rp
 
     # 记入日志,第三个参数记录类名和函数名便于在日志中定位错误
@@ -210,8 +210,8 @@ class Cto_Spider(object):
 
         print("ddddddddddd")
 
-        for url in self.prr.url:
-            coroutine = self.getPage1(url)
+        for urls in self.cdls:
+            coroutine = self.getPage1(urls)
             # 添加任务
             task = asyncio.ensure_future(coroutine)
             # 回调
