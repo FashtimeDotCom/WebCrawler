@@ -17,12 +17,12 @@ class Codeceo_Spider(object):
     name = 'java_codeceo'
     start_urls = []
     for x in ["java","python" ]:  #"python"
-        for i in range(1, 5):  # 38
+        for i in range(1, 5):  # 5
             url = 'http://www.codeceo.com/article/tag/' + str(x) + '/page/' + str(i)
             start_urls.append(url)
     yesterday = time.strftime('%Y-%m-%d', time.localtime(time.time() - 60 * 60 * 24))
     mondays = time.strftime('%m-%d', time.localtime(time.time() - 60 * 60 * 24))
-    prr = Response()
+    cdls = []
     headers = random_headers.random_headers()
     rm = UrlManager()
 
@@ -71,38 +71,40 @@ class Codeceo_Spider(object):
                     else:
                         articleTitle = ""
                     typex = str(response.url).split("tag/")[1].split("/page")[0]
-                    self.prr.meta = {
-                        "typex": typex,
-                        "articleTime": articleTime,
-                        "articleAnswers": articleAnswers,
-                        "articleTitle": articleTitle,
-                    }
                     articleUrl = excerpt.cssselect("h3>a")
                     if articleUrl:
                         articleUrl = articleUrl[0].get("href")
-                        self.prr.url.append(
-                            {
+                        url={
                                 "url": articleUrl,
                                 "upper_url": response.url,
                             }
-                        )
+                        meta = {
+                            "typex": typex,
+                            "articleTime": articleTime,
+                            "articleAnswers": articleAnswers,
+                            "articleTitle": articleTitle,
+                        }
+                        sda = {}
+                        sda["url"] = url
+                        sda["meta"] = meta
+                        self.cdls.append(sda)
 
     @asyncErrorLoging(request_error, no_error, "Codeceo_Spider.getPage1")
     # 进入详细页面
     @asyncRetry(4, rm.add_error_url)
-    async def getPage1(self, url):
-        self.headers["Referer"] = url.get("upper_url")
+    async def getPage1(self, response):
+        self.headers["Referer"] = response["url"].get("upper_url")
         async with RequestManager().session as session:
-            async with session.get(url.get("url"), headers=self.headers) as resp:
+            async with session.get(response["url"].get("url"), headers=self.headers) as resp:
                 print("java_codeceo 222", resp.status)
-                print("java_codeceo 222url", url.get("url"))
+                # print("java_codeceo 222url", response["url"].get("url"))
                 assert resp.status == 200
                 # print("222upper_url", url.get("upper_url"))
                 r_body = await resp.text(errors="ignore")
                 rp = Response()
-                rp.url = url.get("url")
+                rp.url = response["url"].get("url")
                 rp.body = r_body
-                rp.meta = self.prr.meta
+                rp.meta = response["meta"]
                 return rp
 
     @errorLoging(parse_error, no_error, "Codeceo_Spider.grabPage1")
@@ -187,8 +189,8 @@ class Codeceo_Spider(object):
 
         print("ddddddddddd")
 
-        for url in self.prr.url:
-            coroutine = self.getPage1(url)
+        for urls in self.cdls:
+            coroutine = self.getPage1(urls)
             # 添加任务
             task = asyncio.ensure_future(coroutine)
             # 回调
