@@ -20,12 +20,12 @@ class Codeceo_Wd_Spider(object):
     allowed_domains = ["codeceo.com"]
     start_urls = []
     for x in ["java","python"]:#
-        for i in range(1,4):
+        for i in range(1,5):
             url = 'http://ask.codeceo.com/tag/'+str(x)+'/page_'+str(i)
             start_urls.append(url)
     yesterday = time.strftime('%Y-%m-%d', time.localtime(time.time() - 60 * 60 * 24))
     mondays = time.strftime('%m-%d', time.localtime(time.time() - 60 * 60 * 24))
-    prr = Response()
+    cdls = []
     headers = random_headers.random_headers()
     rm = UrlManager()
 
@@ -109,41 +109,43 @@ class Codeceo_Wd_Spider(object):
                     Jtype = Jtype[0].text_content()
                 else:
                     Jtype = "未解决"
-                self.prr.meta = {
-                    "Jtype": Jtype,
-                    "typex": typex,
-                    "articleTime": articleTime,
-                    "articleAuthor": articleAuthor,
-                    "articleAnswers": articleAnswers,
-                    "articleTitle": articleTitle,
-                    "articleReadCount": articleReadCount,
-                }
                 articleUrl = item.cssselect(".item-info>h2>a")
                 if articleUrl:
                     articleUrl = articleUrl[0].get("href")
-                    self.prr.url.append(
-                        {
+                    url={
                             "url": articleUrl,
                             "upper_url": response.url,
-                        }
-                    )
+                    }
+                    meta = {
+                        "Jtype": Jtype,
+                        "typex": typex,
+                        "articleTime": articleTime,
+                        "articleAuthor": articleAuthor,
+                        "articleAnswers": articleAnswers,
+                        "articleTitle": articleTitle,
+                        "articleReadCount": articleReadCount,
+                    }
+                    sda = {}
+                    sda["url"] = url
+                    sda["meta"] = meta
+                    self.cdls.append(sda)
 
     @asyncErrorLoging(request_error, no_error, "Codeceo_Wd_Spider.getPage1")
     @asyncRetry(4, rm.add_error_url)
-    async def getPage1(self, url):
-        self.headers["Referer"] = url.get("upper_url")
+    async def getPage1(self, response):
+        self.headers["Referer"] = response["url"].get("upper_url")
         async with RequestManager().session as session:
-            async with session.get(url.get("url"), headers=self.headers) as resp:
+            async with session.get(response["url"].get("url"), headers=self.headers) as resp:
                 print("java_codeceo_wd 222", resp.status)
-                print("java_codeceo_wd 222url", url.get("url"))
+                # print("java_codeceo_wd 222url", response["url"].get("url"))
                 assert resp.status == 200
                 # print("222upper_url", url.get("upper_url"))
                 # errors="ignore",忽略非法字符
                 r_body = await resp.text(errors="ignore")
                 rp = Response()
-                rp.url = url.get("url")
+                rp.url = response["url"].get("url")
                 rp.body = r_body
-                rp.meta = self.prr.meta
+                rp.meta = response["meta"]
                 return rp
 
     @errorLoging(parse_error, no_error, "Codeceo_Wd_Spider.grabPage1")
@@ -231,8 +233,8 @@ class Codeceo_Wd_Spider(object):
 
         print("ddddddddddd")
 
-        for url in self.prr.url:
-            coroutine = self.getPage1(url)
+        for urls in self.cdls:
+            coroutine = self.getPage1(urls)
             # 添加任务
             task = asyncio.ensure_future(coroutine)
             # 回调
